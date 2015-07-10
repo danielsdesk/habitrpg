@@ -44,6 +44,7 @@
         }
       }, p = ["clearEventProperties", "identify", "setEventProperties", "track", "unsetEventProperty"], c = 0; c < p.length; c++) heap[p[c]] = o(p[c])
     };
+    heap.load("65819067");
 
     function loadScripts() {
       setTimeout(function() {
