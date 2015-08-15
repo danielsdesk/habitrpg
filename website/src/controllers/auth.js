@@ -32,11 +32,11 @@ var RegexEscape = function(s){
 api.auth = function(req, res, next) {
   var uid = req.headers['x-api-user'];
   var token = req.headers['x-api-key'];
-  if (!(uid && token)) return res.status(401).json(NO_TOKEN_OR_UID);
+  if (!(uid && token)) return res.json(401, NO_TOKEN_OR_UID);
   User.findOne({_id: uid,apiToken: token}, function(err, user) {
     if (err) return next(err);
-    if (_.isEmpty(user)) return res.status(401).json(NO_USER_FOUND);
-    if (user.auth.blocked) return res.status(401).json(accountSuspended(user._id));
+    if (_.isEmpty(user)) return res.json(401, NO_USER_FOUND);
+    if (user.auth.blocked) return res.json(401, accountSuspended(user._id));
 
     res.locals.wasModified = req.query._v ? +user._v !== +req.query._v : true;
     res.locals.user = user;
@@ -47,10 +47,10 @@ api.auth = function(req, res, next) {
 
 api.authWithSession = function(req, res, next) { //[todo] there is probably a more elegant way of doing this...
   if (!(req.session && req.session.userId))
-    return res.status(401).json(NO_SESSION_FOUND);
+    return res.json(401, NO_SESSION_FOUND);
   User.findOne({_id: req.session.userId}, function(err, user) {
     if (err) return next(err);
-    if (_.isEmpty(user)) return res.status(401).json(NO_USER_FOUND);
+    if (_.isEmpty(user)) return res.json(401, NO_USER_FOUND);
     res.locals.user = user;
     next();
   });
@@ -59,7 +59,7 @@ api.authWithSession = function(req, res, next) { //[todo] there is probably a mo
 api.authWithUrl = function(req, res, next) {
   User.findOne({_id:req.query._id, apiToken:req.query.apiToken}, function(err,user){
     if (err) return next(err);
-    if (_.isEmpty(user)) return res.status(401).json(NO_USER_FOUND);
+    if (_.isEmpty(user)) return res.json(401, NO_USER_FOUND);
     res.locals.user = user;
     next();
   });
@@ -128,8 +128,8 @@ api.registerUser = function(req, res, next) {
       }
     }]
   }, function(err, data) {
-    if (err) return err.code ? res.status(err.code).json(err) : next(err);
-    res.status(200).json(data.register[0]);
+    if (err) return err.code ? res.json(err.code, err) : next(err);
+    res.json(200, data.register[0]);
   });
 };
 
@@ -141,19 +141,19 @@ api.registerUser = function(req, res, next) {
 api.loginLocal = function(req, res, next) {
   var username = req.body.username;
   var password = req.body.password;
-  if (!(username && password)) return res.status(401).json({err:'Missing :username or :password in request body, please provide both'});
+  if (!(username && password)) return res.json(401, {err:'Missing :username or :password in request body, please provide both'});
   var login = validator.isEmail(username) ? {'auth.local.email':username} : {'auth.local.username':username};
   User.findOne(login, {auth:1}, function(err, user){
     if (err) return next(err);
-    if (!user) return res.status(401).json({err:"Uh-oh - your username or password is incorrect.\n- Make sure your username or email is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login.\n- If you forgot your password, click \"Forgot Password\"."});
-    if (user.auth.blocked) return res.status(401).json(accountSuspended(user._id));
+    if (!user) return res.json(401, {err:"Uh-oh - your username or password is incorrect.\n- Make sure your username or email is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login.\n- If you forgot your password, click \"Forgot Password\"."});
+    if (user.auth.blocked) return res.json(401, accountSuspended(user._id));
     // We needed the whole user object first so we can get his salt to encrypt password comparison
     User.findOne(
       {$and: [login, {'auth.local.hashed_password': utils.encryptPassword(password, user.auth.local.salt)}]}
     , {_id:1, apiToken:1}
     , function(err, user){
       if (err) return next(err);
-      if (!user) return res.status(401).json({err:"Uh-oh - your username or password is incorrect.\n- Make sure your username or email is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login.\n- If you forgot your password, click \"Forgot Password\"."});
+      if (!user) return res.json(401,{err:"Uh-oh - your username or password is incorrect.\n- Make sure your username or email is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login.\n- If you forgot your password, click \"Forgot Password\"."});
       res.json({id: user._id,token: user.apiToken});
       password = null;
     });
@@ -167,7 +167,7 @@ api.loginSocial = function(req, res, next) {
   var access_token = req.body.authResponse.access_token,
     network = req.body.network;
   if (network!=='facebook')
-    return res.status(401).json({err:"Only Facebook supported currently."});
+    return res.json(401, {err:"Only Facebook supported currently."});
   async.auto({
     profile: function (cb) {
       passport._strategies[network].userProfile(access_token, cb);
@@ -209,10 +209,10 @@ api.loginSocial = function(req, res, next) {
       analytics.track('register', analyticsData)
     }]
   }, function(err, results){
-    if (err) return res.status(401).json({err: err.toString ? err.toString() : err});
+    if (err) return res.json(401, {err: err.toString ? err.toString() : err});
     var acct = results.register[0] ? results.register[0] : results.register;
-    if (acct.auth.blocked) return res.status(401).json(accountSuspended(acct._id));
-    return res.status(200).json({id:acct._id, token:acct.apiToken});
+    if (acct.auth.blocked) return res.json(401, accountSuspended(acct._id));
+    return res.json(200, {id:acct._id, token:acct.apiToken});
   })
 };
 
@@ -221,13 +221,13 @@ api.loginSocial = function(req, res, next) {
  */
 api.deleteSocial = function(req,res,next){
   if (!res.locals.user.auth.local.username)
-    return res.status(401).json({err:"Account lacks another authentication method, can't detach Facebook"});
+    return res.json(401, {err:"Account lacks another authentication method, can't detach Facebook"});
   //FIXME for some reason, the following gives https://gist.github.com/lefnire/f93eb306069b9089d123
   //res.locals.user.auth.facebook = null;
   //res.locals.user.auth.save(function(err, saved){
   User.update({_id:res.locals.user._id}, {$unset:{'auth.facebook':1}}, function(err){
     if (err) return next(err);
-    res.sendStatus(200);
+    res.send(200);
   })
 }
 
@@ -239,7 +239,7 @@ api.resetPassword = function(req, res, next){
 
   User.findOne({'auth.local.email': RegexEscape(email)}, function(err, user){
     if (err) return next(err);
-    if (!user) return res.status(401).json({err:"Sorry, we can't find a user registered with email " + email + "\n- Make sure your email address is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login."});
+    if (!user) return res.send(401, {err:"Sorry, we can't find a user registered with email " + email + "\n- Make sure your email address is typed correctly.\n- You may have signed up with Facebook, not email. Double-check by trying Facebook login."});
     user.auth.local.salt = salt;
     user.auth.local.hashed_password = hashed_password;
     utils.sendEmail({
@@ -277,8 +277,8 @@ api.changeUsername = function(req, res, next) {
       res.locals.user.save(cb);
     }
   ], function(err){
-    if (err) return err.code ? res.status(err.code).json(err) : next(err);
-    res.sendStatus(200);
+    if (err) return err.code ? res.json(err.code, err) : next(err);
+    res.send(200);
   })
 }
 
@@ -294,8 +294,8 @@ api.changeEmail = function(req, res, next){
       res.locals.user.save(cb);
     }
   ], function(err){
-    if (err) return err.code ? res.status(err.code).json(err) : next(err);
-    res.sendStatus(200);
+    if (err) return err.code ? res.json(err.code,err) : next(err);
+    res.send(200);
   })
 }
 
@@ -306,19 +306,19 @@ api.changePassword = function(req, res, next) {
     confirmNewPassword = req.body.confirmNewPassword;
 
   if (newPassword != confirmNewPassword)
-    return res.status(401).json({err: "Password & Confirm don't match"});
+    return res.json(401, {err: "Password & Confirm don't match"});
 
   var salt = user.auth.local.salt,
     hashed_old_password = utils.encryptPassword(oldPassword, salt),
     hashed_new_password = utils.encryptPassword(newPassword, salt);
 
   if (hashed_old_password !== user.auth.local.hashed_password)
-    return res.status(401).json({err:"Old password doesn't match"});
+    return res.json(401, {err:"Old password doesn't match"});
 
   user.auth.local.hashed_password = hashed_new_password;
   user.save(function(err, saved){
     if (err) next(err);
-    res.sendStatus(200);
+    res.send(200);
   })
 }
 
