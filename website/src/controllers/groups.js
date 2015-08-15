@@ -141,7 +141,7 @@ api.get = function(req, res, next) {
   q.exec(function(err, group){
     if (err) return next(err);
     if(!group){
-      if(gid !== 'party') return res.json(404,{err: "Group not found or you don't have access."});
+      if(gid !== 'party') return res.status(404).json({err: "Group not found or you don't have access."});
 
       // Don't send a 404 when querying for a party even if it doesn't exist
       // so that users with no party don't get a 404 on every access to the site
@@ -182,7 +182,7 @@ api.create = function(req, res, next) {
   group.leader = user._id;
 
   if(group.type === 'guild'){
-    if(user.balance < 1) return res.json(401, {err: 'Not enough gems!'});
+    if(user.balance < 1) return res.status(401).json({err: 'Not enough gems!'});
 
     group.balance = 1;
     user.balance--;
@@ -210,7 +210,7 @@ api.create = function(req, res, next) {
         saved.populate('members', nameFields, cb);
       }
     ], function(err, populated){
-      if (err == 'Already in a party, try refreshing.') return res.json(400,{err:err});
+      if (err == 'Already in a party, try refreshing.') return res.status(400).json({err:err});
       if (err) return next(err);
       group = user = null;
       return res.json(populated);
@@ -223,7 +223,7 @@ api.update = function(req, res, next) {
   var user = res.locals.user;
 
   if(group.leader !== user._id)
-    return res.json(401, {err: "Only the group leader can update the group!"});
+    return res.status(401).json({err: "Only the group leader can update the group!"});
 
   'name description logo logo leaderMessage leader leaderOnly'.split(' ').forEach(function(attr){
     group[attr] = req.body[attr];
@@ -231,7 +231,7 @@ api.update = function(req, res, next) {
 
   group.save(function(err, saved){
     if (err) return next(err);
-    res.send(204);
+    res.sendStatus(204);
   });
 }
 
@@ -240,7 +240,7 @@ api.attachGroup = function(req, res, next) {
   var q = (gid == 'party') ? Group.findOne({type: 'party', members: {'$in': [res.locals.user._id]}}) : Group.findById(gid);
   q.exec(function(err, group){
     if(err) return next(err);
-    if(!group) return res.json(404, {err: "Group not found"});
+    if(!group) return res.status(404).json({err: "Group not found"});
     res.locals.group = group;
     next();
   })
@@ -259,7 +259,7 @@ api.getChat = function(req, res, next) {
   populateQuery(gid, q);
   q.exec(function(err, group){
     if (err) return next(err);
-    if (!group && gid!=='party') return res.json(404,{err: "Group not found or you don't have access."});
+    if (!group && gid!=='party') return res.status(404).json({err: "Group not found or you don't have access."});
     res.json(res.locals.group.chat);
     gid = null;
   });
@@ -270,11 +270,11 @@ api.getChat = function(req, res, next) {
  */
 api.postChat = function(req, res, next) {
   if(!req.query.message) {
-    return res.json(400,{err:'You cannot send a blank message'});
+    return res.status(400).json({err:'You cannot send a blank message'});
   } else {
     var user = res.locals.user
     var group = res.locals.group;
-    if (group.type!='party' && user.flags.chatRevoked) return res.json(401,{err:'Your chat privileges have been revoked.'});
+    if (group.type!='party' && user.flags.chatRevoked) return res.status(401).json({err:'Your chat privileges have been revoked.'});
     var lastClientMsg = req.query.previousMsg;
     var chatUpdated = (lastClientMsg && group.chat && group.chat[0] && group.chat[0].id !== lastClientMsg) ? true : false;
 
@@ -298,17 +298,17 @@ api.deleteChatMessage = function(req, res, next){
   var group = res.locals.group;
   var message = _.find(group.chat, {id: req.params.messageId});
 
-  if(!message) return res.json(404, {err: "Message not found!"});
+  if(!message) return res.status(404).json({err: "Message not found!"});
 
   if(user._id !== message.uuid && !(user.backer && user.contributor.admin))
-    return res.json(401, {err: "Not authorized to delete this message!"})
+    return res.status(401).json({err: "Not authorized to delete this message!"})
 
   var lastClientMsg = req.query.previousMsg;
   var chatUpdated = (lastClientMsg && group.chat && group.chat[0] && group.chat[0].id !== lastClientMsg) ? true : false;
 
   Group.update({_id:group._id}, {$pull:{chat:{id: req.params.messageId}}}, function(err){
     if(err) return next(err);
-    chatUpdated ? res.json({chat: group.chat}) : res.send(204);
+    chatUpdated ? res.json({chat: group.chat}) : res.sendStatus(204);
     group = chatUpdated = null;
   });
 }
@@ -318,15 +318,15 @@ api.flagChatMessage = function(req, res, next){
   var group = res.locals.group;
   var message = _.find(group.chat, {id: req.params.mid});
 
-  if(!message) return res.json(404, {err: "Message not found!"});
-  if(message.uuid == user._id) return res.json(401, {err: "Can't report your own message."});
+  if(!message) return res.status(404).json({err: "Message not found!"});
+  if(message.uuid == user._id) return res.status(401).json({err: "Can't report your own message."});
 
   User.findOne({_id: message.uuid}, {auth: 1}, function(err, author){
     if(err) return next(err);
 
     // Log user ids that have flagged the message
     if(!message.flags) message.flags = {};
-    if(message.flags[user._id] && !user.contributor.admin) return res.json(401, {err: "You have already reported this message"});
+    if(message.flags[user._id] && !user.contributor.admin) return res.status(401).json({err: "You have already reported this message"});
     message.flags[user._id] = true;
 
     // Log total number of flags (publicly viewable)
@@ -372,7 +372,7 @@ api.flagChatMessage = function(req, res, next){
           {name: "GROUP_URL", content: group._id == 'habitrpg' ? '/#/options/groups/tavern' : (group.type === 'guild' ? ('/#/options/groups/guilds/' + group._id) : 'party')},
         ]);
 
-      return res.send(204);
+      return res.sendStatus(204);
     });
   });
 
@@ -383,7 +383,7 @@ api.clearFlagCount = function(req, res, next){
   var group = res.locals.group;
   var message = _.find(group.chat, {id: req.params.mid});
 
-  if(!message) return res.json(404, {err: "Message not found!"});
+  if(!message) return res.status(404).json({err: "Message not found!"});
 
   if(user.contributor.admin){
     message.flagCount = 0;
@@ -391,10 +391,10 @@ api.clearFlagCount = function(req, res, next){
     group.markModified('chat');
     group.save(function(err,_saved){
       if(err) return next(err);
-      return res.send(204);
+      return res.sendStatus(204);
     });
   }else{
-    return res.json(401, {err: "Only an admin can clear the flag count!"})
+    return res.status(401).json({err: "Only an admin can clear the flag count!"})
   }
 
 }
@@ -407,15 +407,15 @@ api.seenMessage = function(req,res,next){
     update['$unset']['newMessages.'+req.params.gid] = '';
     User.update({_id:req.headers['x-api-user'], apiToken:req.headers['x-api-key']},update).exec();
   }
-  res.send(200);
+  res.sendStatus(200);
 }
 
 api.likeChatMessage = function(req, res, next) {
   var user = res.locals.user;
   var group = res.locals.group;
   var message = _.find(group.chat, {id: req.params.mid});
-  if (!message) return res.json(404, {err: "Message not found!"});
-  if (message.uuid == user._id) return res.json(401, {err: "Can't like your own message. Don't be that person."});
+  if (!message) return res.status(404).json({err: "Message not found!"});
+  if (message.uuid == user._id) return res.status(401).json({err: "Can't like your own message. Don't be that person."});
   if (!message.likes) message.likes = {};
   if (message.likes[user._id]) {
     delete message.likes[user._id];
@@ -428,7 +428,7 @@ api.likeChatMessage = function(req, res, next) {
     // @TODO: We're sending back the entire array of chats back
     // Should we just send back the object of the single chat message?
     // If not, should we update the group chat when a chat is liked?
-    return res.send(_saved.chat);
+    return res.json(_saved.chat);
   })
 }
 
@@ -459,7 +459,7 @@ api.join = function(req, res, next) {
     }
   }
 
-  if(!isUserInvited) return res.json(401, {err: "Can't join a group you're not invited to."});
+  if(!isUserInvited) return res.status(401).json({err: "Can't join a group you're not invited to."});
 
   if (!_.contains(group.members, user._id)){
     group.members.push(user._id);
@@ -556,7 +556,7 @@ api.leave = function(req, res, next) {
   ],function(err){
     if (err) return next(err);
     user = group = keep = null;
-    return res.send(204);
+    return res.sendStatus(204);
   })
 }
 
@@ -634,7 +634,7 @@ var inviteByUUIDs = function(uuids, group, req, res, next){
       }
     });
   }, function(err){
-    if(err) return err.code ? res.json(err.code, {err: err.err}) : next(err);
+    if(err) return err.code ? res.status(err.code).json({err: err.err}) : next(err);
 
     // TODO pass group from save above don't find it again, or you have to find it again in order to run populate?
     populateQuery(group.type, Group.findById(group._id)).exec(function(err, populatedGroup){
@@ -692,7 +692,7 @@ var inviteByEmails = function(invites, group, req, res, next){
       cb();
     }
   }, function(err){
-    if(err) return err.code ? res.json(err.code, {err: err.err}) : next(err);
+    if(err) return err.code ? res.status(err.code).json({err: err.err}) : next(err);
 
     if(usersAlreadyRegistered.length > 0){
       inviteByUUIDs(usersAlreadyRegistered, group, req, res, next);
@@ -700,7 +700,7 @@ var inviteByEmails = function(invites, group, req, res, next){
 
       // Send only status code down the line because it doesn't need
       // info on invited users since they are not yet registered
-      res.send(200);
+      res.sendStatus(200);
     }
   });
 };
@@ -713,7 +713,7 @@ api.invite = function(req, res, next){
   }else if(req.body.emails){
     inviteByEmails(req.body.emails, group, req, res, next)
   }else{
-    return res.json(400,{err: "Can invite only by email or uuid"});
+    return res.status(400).json({err: "Can invite only by email or uuid"});
   }
 }
 
@@ -736,7 +736,7 @@ api.removeMember = function(req, res, next){
   }
 
   if(group.leader !== user._id){
-    return res.json(401, {err: "Only group leader can remove a member!"});
+    return res.status(401).json({err: "Only group leader can remove a member!"});
   }
 
   if(_.contains(group.members, uuid)){
@@ -764,7 +764,7 @@ api.removeMember = function(req, res, next){
         // Sending an empty 204 because Group.update doesn't return the group
         // see http://mongoosejs.com/docs/api.html#model_Model.update
         group = uuid = null;
-        return res.send(204);
+        return res.sendStatus(204);
       });
     });
   }else if(_.contains(group.invites, uuid)){
@@ -792,13 +792,13 @@ api.removeMember = function(req, res, next){
         // see http://mongoosejs.com/docs/api.html#model_Model.update
         sendMessage(invited);
         group = uuid = null;
-        return res.send(204);
+        return res.sendStatus(204);
       });
 
     });
   }else{
     group = uuid = null;
-    return res.json(400, {err: "User not found among group's members!"});
+    return res.status(400).json({err: "User not found among group's members!"});
   }
 }
 
@@ -911,15 +911,15 @@ api.questAccept = function(req, res, next) {
   var user = res.locals.user;
   var key = req.query.key;
 
-  if (!group) return res.json(400, {err: "Must be in a party to start quests."});
+  if (!group) return res.status(400).json({err: "Must be in a party to start quests."});
 
   // If ?key=xxx is provided, we're starting a new quest and inviting the party. Otherwise, we're a party member accepting the invitation
   if (key) {
     var quest = shared.content.quests[key];
-    if (!quest) return res.json(404,{err:'Quest ' + key + ' not found'});
-    if (quest.lvl && user.stats.lvl < quest.lvl) return res.json(400, {err: "You must be level "+quest.lvl+" to begin this quest."});
-    if (group.quest.key) return res.json(400, {err: 'Your party is already on a quest. Try again when the current quest has ended.'});
-    if (!user.items.quests[key]) return res.json(400, {err: "You don't own that quest scroll"});
+    if (!quest) return res.status(404).json({err:'Quest ' + key + ' not found'});
+    if (quest.lvl && user.stats.lvl < quest.lvl) return res.status(400).json({err: "You must be level "+quest.lvl+" to begin this quest."});
+    if (group.quest.key) return res.status(400).json({err: 'Your party is already on a quest. Try again when the current quest has ended.'});
+    if (!user.items.quests[key]) return res.status(400).json({err: "You don't own that quest scroll"});
     group.quest.key = key;
     group.quest.members = {};
     // Invite everyone. true means "accepted", false="rejected", undefined="pending". Once we click "start quest"
@@ -971,7 +971,7 @@ api.questAccept = function(req, res, next) {
 
   // Party member accepting the invitation
   } else {
-    if (!group.quest.key) return res.json(400,{err:'No quest invitation has been sent out yet.'});
+    if (!group.quest.key) return res.status(400).json({err:'No quest invitation has been sent out yet.'});
     var analyticsData = {
       category: 'behavior',
       owner: false,
@@ -990,7 +990,7 @@ api.questReject = function(req, res, next) {
   var group = res.locals.group;
   var user = res.locals.user;
 
-  if (!group.quest.key) return res.json(400,{err:'No quest invitation has been sent out yet.'});
+  if (!group.quest.key) return res.status(400).json({err:'No quest invitation has been sent out yet.'});
   var analyticsData = {
     category: 'behavior',
     owner: false,
