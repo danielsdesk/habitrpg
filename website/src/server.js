@@ -132,7 +132,6 @@ if (cores!==0 && cluster.isMaster && (isDev || isProd)) {
   app.use('/api/v1', require('./routes/apiv1'));
   app.use('/export', require('./routes/dataexport'));
   require('./routes/apiv2.coffee')(swagger, v2);
-  app.use(require('./middlewares/errorHandler'));
 
   var maxAge = isProd ? 31536000000 : 0;
   // Cache emojis without copying them to build, they are too many
@@ -142,6 +141,8 @@ if (cores!==0 && cluster.isMaster && (isDev || isProd)) {
   app.use('/common/script/public', express['static'](publicDir + '/../../common/script/public', { maxAge: maxAge }));
   app.use('/common/img', express['static'](publicDir + '/../../common/img', { maxAge: maxAge }));
   app.use(express['static'](publicDir));
+
+  app.use(require('./middlewares/errorHandler'));
 
   server.on('request', app);
   server.listen(app.get('port'), function() {
