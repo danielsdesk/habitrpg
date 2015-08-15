@@ -75,11 +75,6 @@
     "winston-newrelic": "~0.1.4"
   },
   "private": true,
-  "subdomain": "habitrpg",
-  "domains": [
-    "habitrpg.com",
-    "www.habitrpg.com"
-  ],
   "engines": {
     "node": "0.10.x"
   },
