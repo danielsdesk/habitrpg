@@ -364,7 +364,7 @@ api.cron = function(req, res, next) {
 // api.reroll // Shared.ops
 // api.reset // Shared.ops
 
-api['delete'] = function(req, res, next) {
+api.delete = function(req, res, next) {
   var plan = res.locals.user.purchased.plan;
   if (plan && plan.customerId && !plan.dateTerminated)
     return res.json(400,{err:"You have an active subscription, cancel your plan before deleting your account."});
